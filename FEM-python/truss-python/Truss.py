@@ -16,13 +16,13 @@ Created on Sat May 9 18:34:00 2020
 
 @author: thurcni@163.com, xzhang@tsinghua.edu.cn
 """
-from sys import argv,exit
+import argparse
 import FEData as model
 from TrussElem import TrussElem
 from PrePost import create_model_json, print_stress, plot_deformation
 from utitls import assembly, solvedr
 
-def FERun(DataFile):
+def FERun(DataFile, method="reduction"):
     # create FE model from DataFile in json format
     create_model_json(DataFile)
 
@@ -32,7 +32,7 @@ def FERun(DataFile):
         assembly(e, ke)
     
     # Partition and solution
-    solvedr(method="reduction")
+    solvedr(method=method)
 
     # Postprocessing
     print_stress()
@@ -40,11 +40,10 @@ def FERun(DataFile):
 
 
 if __name__ == "__main__":
-    nargs = len(argv)
-    if nargs == 2:
-        DataFile = argv[1]
-    else:
-        print("Usage ： Truss file_name")
-        exit()
+    parser = argparse.ArgumentParser(description="Truss FE analysis program.")
+    parser.add_argument("file_name", help="File name in which the FE model is stored in json format")
+    parser.add_argument("--method", choices=["reduction", "penalty"], default="reduction",
+                        help="Select the method for applying displacement boundary conditions (default: reduction).")
+    args = parser.parse_args()
 
-    FERun(DataFile)
+    FERun(args.file_name, method=args.method)

@@ -24,30 +24,17 @@ def TrussElem(e):
     # constant coefficient for each truss element
     const = model.CArea[e]*model.E[e]/model.leng[e]
 
-    # calculate element stiffness matrix
-    if model.ndof == 1:
-        ke = const*np.array([[1, -1], [-1, 1]])
-    elif model.ndof == 2:
-        IENe = model.IEN[e] - 1
-        xe = model.x[IENe]
-        ye = model.y[IENe]
-        s = (ye[1] - ye[0])/model.leng[e]
-        c = (xe[1] - xe[0])/model.leng[e]
-
-        s_s = s*s
-        c_c = c*c
-        c_s = c*s
-
-        ke = const*np.array([[c_c, c_s, -c_c, -c_s],
-                             [c_s, s_s, -c_s, -s_s],
-                             [-c_c, -c_s, c_c, c_s],
-                             [-c_s, -s_s, c_s, s_s]])
-    elif model.ndof == 3:
-        # insert your code here for 3D
-        # ...
-        pass # delete or comment this line after your implementation for 3D
-    else:
-        raise ValueError("The dimension (ndof = {0}) given for the problem \
-                         is invalid".format(model.ndof))
+    # calculate element stiffness matrix generalized for 1D, 2D, and 3D
+    n1, n2 = model.IEN[e, 0] - 1, model.IEN[e, 1] - 1
+    
+    d_coord = [model.x[n2] - model.x[n1]]
+    if model.ndof >= 2: d_coord.append(model.y[n2] - model.y[n1])
+    if model.ndof == 3: d_coord.append(model.z[n2] - model.z[n1])
+    
+    T = np.array(d_coord) / model.leng[e]
+    ke_top = const * np.outer(T, T)
+    
+    ke = np.block([[ke_top, -ke_top],
+                   [-ke_top, ke_top]])
     
     return ke

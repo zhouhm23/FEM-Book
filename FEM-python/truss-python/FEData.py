@@ -50,6 +50,7 @@ stress= np.array([])
 
 x     = np.array([])
 y     = np.array([])
+z     = np.array([])
 IEN   = np.array([[]])
 LM    = np.array([[]])
 K     = np.array([[]])

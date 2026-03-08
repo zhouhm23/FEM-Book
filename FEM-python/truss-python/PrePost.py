@@ -39,8 +39,10 @@ def create_model_json(DataFile):
     model.K = np.zeros((model.neq,model.neq))
 
     # define the mesh
-    model.x = np.array(FEData['x'])
-    model.y = np.array(FEData['y'])  
+    model.x = np.array(FEData.get('x', []))
+    model.y = np.array(FEData.get('y', np.zeros_like(model.x)))
+    model.z = np.array(FEData.get('z', np.zeros_like(model.x)))
+
     model.IEN = np.array(FEData['IEN'], dtype=int)
     model.LM = np.zeros((model.nen*model.ndof, model.nel), dtype=int)
     set_LM()
@@ -48,10 +50,15 @@ def create_model_json(DataFile):
     # element and material data (given at the element)
     model.E     = np.array(FEData['E'])
     model.CArea = np.array(FEData['CArea'])
-    model.leng  = np.sqrt(np.power(model.x[model.IEN[:, 1]-1] - 
-                                   model.x[model.IEN[:, 0]-1], 2) +
-                          np.power(model.y[model.IEN[:, 1]-1] - 
-                                   model.y[model.IEN[:, 0]-1], 2))
+    
+    idx0 = model.IEN[:, 0] - 1
+    idx1 = model.IEN[:, 1] - 1
+    model.leng = np.sqrt(
+        (model.x[idx1] - model.x[idx0])**2 +
+        (model.y[idx1] - model.y[idx0])**2 +
+        (model.z[idx1] - model.z[idx0])**2
+    )
+    
     model.stress= np.zeros((model.nel,))
 
     # prescribed forces
@@ -61,10 +68,17 @@ def create_model_json(DataFile):
         model.f[value-1][0] = force[ind]
 
     # output plots
-    model.plot_truss= FEData['plot_truss']
-    model.plot_node = FEData['plot_node']
-    model.plot_tex  = FEData['plot_tex']
-    plottruss()
+    model.plot_truss= FEData.get('plot_truss', 'no')
+    model.plot_node = FEData.get('plot_node', 'no')
+    model.plot_tex  = FEData.get('plot_tex', 'no')
+    
+    # Optional print here instead of plottruss, because we print stats in plot_deformation now
+    # We will just print the summary here.
+    print(f"\t{model.ndof}D Truss Params \n")
+    print(model.Title + "\n")
+    print("No. of Elements  {0}".format(model.nel))
+    print("No. of Nodes     {0}".format(model.nnp))
+    print("No. of Equations {0}".format(model.neq))
 
 
 def plot_deformation(scaling_factor=None):
@@ -78,42 +92,46 @@ def plot_deformation(scaling_factor=None):
     d = model.d.flatten()
     ux = d[0::model.ndof]
     uy = d[1::model.ndof] if model.ndof >= 2 else np.zeros_like(ux)
+    uz = d[2::model.ndof] if model.ndof == 3 else np.zeros_like(ux)
 
     # Automatically determine scaling factor if not provided
     if scaling_factor is None:
         max_dim = max(np.max(model.x) - np.min(model.x), np.max(model.y) - np.min(model.y))
-        max_disp = np.max(np.sqrt(ux**2 + uy**2))
-        if max_disp > 0:
-            scaling_factor = 0.1 * max_dim / max_disp
-        else:
-            scaling_factor = 1.0
+        max_disp = np.max(np.sqrt(ux**2 + uy**2 + uz**2))
+        scaling_factor = 0.1 * max_dim / max_disp if max_disp > 0 else 1.0
     
     print(f"Plotting deformation with scaling factor: {scaling_factor:.2e}")
 
     # Deformed coordinates
     x_def = model.x + scaling_factor * ux
     y_def = model.y + scaling_factor * uy
+    z_def = model.z + scaling_factor * uz
 
-    plt.figure()
-    if model.ndof == 1:
-        for i in range(model.nel):
-            # Original
-            XX = np.array([model.x[model.IEN[i, 0]-1], model.x[model.IEN[i, 1]-1]])
-            YY = np.array([0.0, 0.0])
-            plt.plot(XX, YY, "b--", alpha=0.3)
-            # Deformed
-            XX_def = np.array([x_def[model.IEN[i, 0]-1], x_def[model.IEN[i, 1]-1]])
-            plt.plot(XX_def, YY, "r-")
-    elif model.ndof == 2:
-        for i in range(model.nel):
-            # Original
-            XX = np.array([model.x[model.IEN[i, 0]-1], model.x[model.IEN[i, 1]-1]])
-            YY = np.array([model.y[model.IEN[i, 0]-1], model.y[model.IEN[i, 1]-1]])
-            plt.plot(XX, YY, "b--", alpha=0.3)
-            # Deformed
-            XX_def = np.array([x_def[model.IEN[i, 0]-1], x_def[model.IEN[i, 1]-1]])
-            YY_def = np.array([y_def[model.IEN[i, 0]-1], y_def[model.IEN[i, 1]-1]])
-            plt.plot(XX_def, YY_def, "r-")
+    fig = plt.figure()
+    is_3d = (model.ndof == 3)
+    ax = fig.add_subplot(111, projection='3d') if is_3d else fig.add_subplot(111)
+
+    for i in range(model.nel):
+        n1, n2 = model.IEN[i, 0] - 1, model.IEN[i, 1] - 1
+        
+        pts_orig = [model.x[[n1, n2]], model.y[[n1, n2]]]
+        pts_def = [x_def[[n1, n2]], y_def[[n1, n2]]]
+        
+        if is_3d:
+            pts_orig.append(model.z[[n1, n2]])
+            pts_def.append(z_def[[n1, n2]])
+            
+        # Plot original with thicker linewidth when overlapping
+        ax.plot(*pts_orig, "b--", alpha=0.3, linewidth=3)
+        # Plot deformed with standard linewidth (1.5)
+        ax.plot(*pts_def, "r-", linewidth=1.5)
+        
+        if model.plot_node == "yes":
+            ax.text(*[p[0] for p in pts_orig], str(n1 + 1)) # type: ignore
+            ax.text(*[p[1] for p in pts_orig], str(n2 + 1)) # type: ignore
+
+    if is_3d:
+        ax.set_zlabel("z") # type: ignore
     
     plt.title(f"Deformed Truss (Scale: {scaling_factor:.1f}x)")
     plt.xlabel("x")
@@ -121,6 +139,16 @@ def plot_deformation(scaling_factor=None):
     plt.axis('equal')
     plt.legend(["Original", "Deformed"])
     plt.savefig("truss_deformation.pdf")
+    
+    if model.plot_tex == "yes":
+        try:
+            import tikzplotlib
+            tikzplotlib.clean_figure()
+            tikzplotlib.save("fe_plot.tex")
+        except ImportError as e:
+            print(f"Warning: Failed to import tikzplotlib or related module to generate TeX plot ({e}). "
+                  "Ignoring TeX plot generation.")
+                  
     plt.show()
 
 
@@ -135,59 +163,6 @@ def set_LM():
                 model.LM[ind, e] = model.ndof*(model.IEN[e, j] - 1) + m
 
 
-def plottruss():
-    '''
-    plot the truss
-    '''
-    if model.plot_truss == "yes":
-        if model.ndof == 1:
-            for i in range(model.nel):
-                XX = np.array([model.x[model.IEN[i, 0]-1], 
-                               model.x[model.IEN[i, 1]-1]])
-                YY = np.array([0.0, 0.0])
-                plt.plot(XX, YY, "blue")
-
-                if model.plot_node == "yes":
-                    plt.text(XX[0], YY[0], str(model.IEN[i, 0]))
-                    plt.text(XX[1], YY[1], str(model.IEN[i, 1]))
-        elif model.ndof == 2:
-            for i in range(model.nel):
-                XX = np.array([model.x[model.IEN[i, 0]-1], 
-                               model.x[model.IEN[i, 1]-1]])
-                YY = np.array([model.y[model.IEN[i, 0]-1], 
-                               model.y[model.IEN[i, 1]-1]])
-                plt.plot(XX, YY, "blue")
-
-                if model.plot_node == "yes":
-                    plt.text(XX[0], YY[0], str(model.IEN[i, 0]))
-                    plt.text(XX[1], YY[1], str(model.IEN[i, 1]))
-        elif model.ndof == 3:
-            # insert your code here for 3D
-            # ...
-            pass # delete or comment this line after your implementation for 3D
-        else:
-            raise ValueError("The dimension (ndof = {0}) given for the \
-                             plottruss is invalid".format(model.ndof))
-        
-        plt.title("Truss Plot")
-        plt.xlabel(r"$x$")
-        plt.ylabel(r"$y$")
-        plt.savefig("truss.pdf")
-
-        # Convert matplotlib figures into PGFPlots figures stored in a Tikz file, 
-        # which can be added into your LaTex source code by "\input{fe_plot.tex}"
-        if model.plot_tex == "yes":
-            import tikzplotlib
-            tikzplotlib.clean_figure()
-            tikzplotlib.save("fe_plot.tex")
-    
-    print("\t2D Truss Params \n")
-    print(model.Title + "\n")
-    print("No. of Elements  {0}".format(model.nel))
-    print("No. of Nodes     {0}".format(model.nnp))
-    print("No. of Equations {0}".format(model.neq))
-
-
 def print_stress():
     '''
     Calculate and print stresses of every element
@@ -197,25 +172,18 @@ def print_stress():
     print("Element\t\t\tStress")
     # Compute stress for each element
     for e in range(model.nel):
-        de = model.d[model.LM[:, e]]  # nodal displacements for each element
+        de = model.d[model.LM[:, e]].flatten()  # nodal displacements for each element
         const = model.E[e]/model.leng[e]
 
-        if model.ndof == 1:
-            model.stress[e] = const*(np.array([-1, 1])@de)
-        elif model.ndof == 2:
-            IENe = model.IEN[e] - 1
-            xe = model.x[IENe]
-            ye = model.y[IENe]
-            s = (ye[1] - ye[0])/model.leng[e]
-            c = (xe[1] - xe[0])/model.leng[e]
-            model.stress[e] = const*(np.array([-c, -s, c, s])@de)
-        elif model.ndof == 3:
-            # insert your code here for 3D
-            # ...
-            pass # delete or comment this line after your implementation for 3D
-        else:
-            raise ValueError("The dimension (ndof = {0}) given for the \
-                             problem is invalid".format(model.ndof))
-
+        n1, n2 = model.IEN[e, 0] - 1, model.IEN[e, 1] - 1
+        
+        d_coord = [model.x[n2] - model.x[n1]]
+        if model.ndof >= 2: d_coord.append(model.y[n2] - model.y[n1])
+        if model.ndof == 3: d_coord.append(model.z[n2] - model.z[n1])
+        
+        c = np.array(d_coord) / model.leng[e]
+        T = np.concatenate([-c, c])
+        
+        model.stress[e] = const * (T @ de)
         print("{0}\t\t\t{1}".format(e+1, model.stress[e]))
         
