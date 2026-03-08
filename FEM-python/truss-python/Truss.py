@@ -32,7 +32,7 @@ def FERun(DataFile):
         assembly(e, ke)
     
     # Partition and solution
-    solvedr()
+    solvedr(method="reduction")
 
     # Postprocessing
     print_stress()
