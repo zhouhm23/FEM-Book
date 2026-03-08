@@ -19,7 +19,7 @@ Created on Sat May 9 18:34:00 2020
 from sys import argv,exit
 import FEData as model
 from TrussElem import TrussElem
-from PrePost import create_model_json, print_stress
+from PrePost import create_model_json, print_stress, plot_deformation
 from utitls import assembly, solvedr
 
 def FERun(DataFile):
@@ -36,6 +36,7 @@ def FERun(DataFile):
 
     # Postprocessing
     print_stress()
+    plot_deformation()
 
 
 if __name__ == "__main__":

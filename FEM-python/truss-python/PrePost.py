@@ -67,6 +67,63 @@ def create_model_json(DataFile):
     plottruss()
 
 
+def plot_deformation(scaling_factor=None):
+    '''
+    Plot the deformed truss structure.
+    '''
+    if model.plot_truss != "yes":
+        return
+
+    # Calculate displacements
+    d = model.d.flatten()
+    ux = d[0::model.ndof]
+    uy = d[1::model.ndof] if model.ndof >= 2 else np.zeros_like(ux)
+
+    # Automatically determine scaling factor if not provided
+    if scaling_factor is None:
+        max_dim = max(np.max(model.x) - np.min(model.x), np.max(model.y) - np.min(model.y))
+        max_disp = np.max(np.sqrt(ux**2 + uy**2))
+        if max_disp > 0:
+            scaling_factor = 0.1 * max_dim / max_disp
+        else:
+            scaling_factor = 1.0
+    
+    print(f"Plotting deformation with scaling factor: {scaling_factor:.2e}")
+
+    # Deformed coordinates
+    x_def = model.x + scaling_factor * ux
+    y_def = model.y + scaling_factor * uy
+
+    plt.figure()
+    if model.ndof == 1:
+        for i in range(model.nel):
+            # Original
+            XX = np.array([model.x[model.IEN[i, 0]-1], model.x[model.IEN[i, 1]-1]])
+            YY = np.array([0.0, 0.0])
+            plt.plot(XX, YY, "b--", alpha=0.3)
+            # Deformed
+            XX_def = np.array([x_def[model.IEN[i, 0]-1], x_def[model.IEN[i, 1]-1]])
+            plt.plot(XX_def, YY, "r-")
+    elif model.ndof == 2:
+        for i in range(model.nel):
+            # Original
+            XX = np.array([model.x[model.IEN[i, 0]-1], model.x[model.IEN[i, 1]-1]])
+            YY = np.array([model.y[model.IEN[i, 0]-1], model.y[model.IEN[i, 1]-1]])
+            plt.plot(XX, YY, "b--", alpha=0.3)
+            # Deformed
+            XX_def = np.array([x_def[model.IEN[i, 0]-1], x_def[model.IEN[i, 1]-1]])
+            YY_def = np.array([y_def[model.IEN[i, 0]-1], y_def[model.IEN[i, 1]-1]])
+            plt.plot(XX_def, YY_def, "r-")
+    
+    plt.title(f"Deformed Truss (Scale: {scaling_factor:.1f}x)")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.axis('equal')
+    plt.legend(["Original", "Deformed"])
+    plt.savefig("truss_deformation.pdf")
+    plt.show()
+
+
 def set_LM():
     '''
     set up Location Matrix
